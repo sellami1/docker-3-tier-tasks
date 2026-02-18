@@ -1,0 +1,71 @@
+services:
+  database:
+    image: mongo:7.0 # Version spécifique (pas latest)
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DB_NAME}
+      DB_NAME: ${DB_NAME}
+      DB_APP_USER: ${DB_APP_USER}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+      - ./express-tasks-backend/init/init-db.sh:/docker-entrypoint-initdb.d/10-init-db.sh:ro
+    networks:
+      - backend-net # Seulement backend-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ping: 1})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+
+  backend:
+    build: ./express-tasks-backend
+    environment:
+      PORT: ${PORT}
+      DB_HOST: database # Nom du service database
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_APP_USER: ${DB_APP_USER}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - frontend-net # Les deux réseaux
+      - backend-net
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    # HEALTHCHECK déjà dans le Dockerfile
+
+  frontend:
+    build:
+      context: ./react-tasks-frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL} # http://backend:3000
+    ports:
+      - "8080:80" # Accès hôte → frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - frontend-net # Seulement frontend-net
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    # HEALTHCHECK déjà dans le Dockerfile
+
+volumes:
+  mongo-data:
+    driver: local
+
+networks:
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
