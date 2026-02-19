@@ -6,3 +6,5 @@ npm-debug.log
 .gitignore
 *.md
 docs/
+Dockerfile
+.env.*
