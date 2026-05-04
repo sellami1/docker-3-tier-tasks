@@ -27,7 +27,7 @@ spec:
       containers:
         - name: frontend
           image: tasks-frontend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
           envFrom:

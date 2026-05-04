@@ -27,7 +27,7 @@ spec:
       containers:
         - name: backend
           image: tasks-backend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - containerPort: 3000
           envFrom:
