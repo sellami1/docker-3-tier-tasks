@@ -1,0 +1,17 @@
+Déploiement sur Cluster Kubernetes (K3s)
+o Architecture du cluster K3s (1 master + 2 workers)
+o Namespace dédié
+o Manifests Kubernetes utilisés :
+ Deployments (3 deployments : frontend, backend, database)
+ Services (ClusterIP + LoadBalancer ou NodePort pour le frontend)
+ ConfigMaps (configuration de l’application, variables non sensibles)
+ Secrets (mots de passe, clés API, credentials DB)
+ PersistentVolumeClaims (PVC) pour la base de données + StorageClass utilisée
+ Ingress (optionnel mais très apprécié) ou LoadBalancer
+o Best practices appliquées :
+ Resource requests & limits
+ Liveness & Readiness probes
+ ImagePullPolicy, restartPolicy
+ Labels et selectors cohérents
+ Horizontal Pod Autoscaler (HPA) si implémenté (bonus)
+o Stratégie de déploiement (RollingUpdate, etc.)

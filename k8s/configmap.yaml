@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: tasks-app
+data:
+  DB_HOST: database
+  DB_PORT: "27017"
+  DB_NAME: tasksdb
+  PORT: "3000"
+  ORIGIN: "*"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: tasks-app
+data:
+  VITE_API_URL: /api
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongo-init-script
+  namespace: tasks-app
+data:
+  10-init-db.sh: |
+    #!/usr/bin/env bash
+
+    set -e
+
+    mongosh -u "${MONGO_INITDB_ROOT_USERNAME}" -p "${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin <<EOF
+    db = db.getSiblingDB("${DB_NAME}");
+
+    var appUser = "${DB_APP_USER}";
+    var appPwd = "${DB_APP_PASSWORD}";
+
+    var existingUser = db.getUser(appUser);
+    if (!existingUser) {
+      db.createUser({
+        user: appUser,
+        pwd: appPwd,
+        roles: [{ role: "readWrite", db: "${DB_NAME}" }]
+      });
+      print("Created dedicated app user: " + appUser);
+    } else {
+      print("Dedicated app user already exists: " + appUser);
+    }
+
+    db.createCollection("tasks");
+
+    if (db.tasks.countDocuments({}) === 0) {
+      db.tasks.insertMany([
+        {
+          title: "Sample Task 1",
+          description: "This is a sample description for task 1.",
+          status: "pending"
+        },
+        {
+          title: "Sample Task 2",
+          description: "This is a sample description for task 2.",
+          status: "in-progress"
+        },
+        {
+          title: "Sample Task 3",
+          description: "This is a sample description for task 3.",
+          status: "completed"
+        }
+      ]);
+      print("Inserted sample tasks");
+    } else {
+      print("Tasks collection already has data; skipping initialization");
+    }
+    EOF
