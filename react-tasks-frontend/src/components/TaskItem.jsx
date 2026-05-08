@@ -47,37 +47,52 @@ function TaskItem({ task, onUpdate, onDelete }) {
   if (isEditing) {
     return (
       <div className="task-item editing">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input 
+          value={title} 
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Task title"
+        />
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          placeholder="Description"
         />
         <select value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="pending">Pending</option>
-          <option value="in-progress">In Progress</option>
-          <option value="completed">Completed</option>
+          <option value="pending">⏳ Pending</option>
+          <option value="in-progress">🔥 In Progress</option>
+          <option value="completed">✅ Completed</option>
         </select>
-        <button onClick={handleUpdate}>Save</button>
-        <button onClick={() => setIsEditing(false)}>Cancel</button>
+        <div className="edit-actions">
+          <button className="save-btn" onClick={handleUpdate}>💾 Save</button>
+          <button className="cancel-btn" onClick={() => setIsEditing(false)}>❌ Cancel</button>
+        </div>
       </div>
     );
   }
+
+  const statusLabels = {
+    pending: "⏳ Pending",
+    "in-progress": "🔥 In Progress",
+    completed: "✅ Completed"
+  };
 
   return (
     <div className={`task-item ${task.status}`}>
       <div className="task-content">
         <h3>{task.title}</h3>
         <p>{task.description}</p>
-        <span className="status">{task.status}</span>
+        <span className={`status-badge ${task.status}`}>
+          {statusLabels[task.status]}
+        </span>
       </div>
       <div className="actions">
-        <button onClick={() => setIsEditing(true)} title="Edit">
+        <button className="edit" onClick={() => setIsEditing(true)} title="Edit">
           <FaEdit />
         </button>
-        <button onClick={toggleComplete} title="Toggle Complete">
+        <button className="complete" onClick={toggleComplete} title="Toggle Complete">
           <FaCheck />
         </button>
-        <button onClick={handleDelete} className="delete" title="Delete">
+        <button className="delete" onClick={handleDelete} title="Delete">
           <FaTrash />
         </button>
       </div>

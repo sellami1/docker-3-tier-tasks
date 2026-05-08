@@ -1,3 +1,7 @@
+# PersistentVolumeClaim: Requests persistent storage for MongoDB
+# Purpose: Allocates 5Gi of storage for MongoDB data persistence
+# using the app-local-path StorageClass
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

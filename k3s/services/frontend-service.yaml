@@ -1,3 +1,7 @@
+# Frontend Service: NodePort service exposing frontend to external traffic
+# Purpose: Exposes React frontend on NodePort 30080 for external HTTP access;
+# complements Ingress for DNS-based routing
+
 apiVersion: v1
 kind: Service
 metadata:

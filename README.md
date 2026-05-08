@@ -50,22 +50,22 @@ Ne commitez jamais vos mots de passe.
 
 ## Déploiement Kubernetes (K3s)
 
-Les manifests Kubernetes sont disponibles dans `k8s/` et couvrent :
+Les manifests Kubernetes sont disponibles dans `k3s/` et couvrent :
 * Namespace dédié `tasks-app`
 * Deployments (frontend, backend, database), Services (ClusterIP + NodePort), ConfigMaps, Secrets
 * PVC + StorageClass, probes (readiness/liveness), resources, stratégie de déploiement
 * Ingress (optionnel) et HPA (bonus)
 
 Avant d’appliquer :
-* Remplacer les images `tasks-frontend:latest` et `tasks-backend:latest` par vos images publiées.
+* Remplacer les images `tasks-frontend:v1.0.0` et `tasks-backend:v1.0.0` par vos images publiées ou chargées dans le cluster.
 * Mettre à jour le Secret `db-secrets` avec vos valeurs réelles.
 * Adapter l’hôte de l’Ingress (`tasks.local`) si nécessaire.
 
 Exemple d’application des manifests :
 ```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/storageclass.yaml
-kubectl apply -f k8s/
+kubectl apply -f k3s/namespace.yaml
+kubectl apply -f k3s/storageclass.yaml
+kubectl apply -f k3s/
 ```
 
 Accès frontend (NodePort) : `http://<node-ip>:30080`.

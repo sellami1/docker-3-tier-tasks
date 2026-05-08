@@ -29,23 +29,25 @@ function TaskForm({ onTaskAdded }) {
     <form onSubmit={handleSubmit} className="task-form">
       <input
         type="text"
-        placeholder="Task title..."
+        placeholder="✏️ What needs to be done?"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         required
       />
       <textarea
-        placeholder="Description..."
+        placeholder="📝 Add a description..."
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         required
       />
-      <select value={status} onChange={(e) => setStatus(e.target.value)}>
-        <option value="pending">Pending</option>
-        <option value="in-progress">In Progress</option>
-        <option value="completed">Completed</option>
-      </select>
-      <button type="submit">Add Task</button>
+      <div className="form-row">
+        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="pending">⏳ Pending</option>
+          <option value="in-progress">🔥 In Progress</option>
+          <option value="completed">✅ Completed</option>
+        </select>
+        <button type="submit">➕ Add Task</button>
+      </div>
     </form>
   );
 }

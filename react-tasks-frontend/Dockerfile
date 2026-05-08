@@ -35,11 +35,11 @@ RUN chown -R frontenduser:frontendgroup /usr/share/nginx/html && \
 # Switch to non-root user
 USER frontenduser
 
-# Expose port 80
-EXPOSE 80
+# Expose the nginx listen port used by the K3s service
+EXPOSE 8080
 
 # HEALTHCHECK as required
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1/ || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

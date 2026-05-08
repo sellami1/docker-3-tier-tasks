@@ -37,14 +37,42 @@ function App() {
     setTasks(tasks.filter((t) => t._id !== id));
   };
 
+  const stats = {
+    total: tasks.length,
+    pending: tasks.filter(t => t.status === "pending").length,
+    inProgress: tasks.filter(t => t.status === "in-progress").length,
+    completed: tasks.filter(t => t.status === "completed").length,
+  };
+
   if (loading) return <div className="loading">Loading tasks...</div>;
   if (error) return <div className="error">{error}</div>;
 
   return (
     <div className="app">
       <header>
-        <h1>Task Manager</h1>
+        <h1>✨ Task Manager</h1>
+        <p>Organize your work, achieve your goals</p>
       </header>
+      
+      <div className="stats-bar">
+        <div className="stat-card">
+          <span className="number">{stats.total}</span>
+          <span className="label">Total</span>
+        </div>
+        <div className="stat-card">
+          <span className="number">{stats.pending}</span>
+          <span className="label">Pending</span>
+        </div>
+        <div className="stat-card">
+          <span className="number">{stats.inProgress}</span>
+          <span className="label">In Progress</span>
+        </div>
+        <div className="stat-card">
+          <span className="number">{stats.completed}</span>
+          <span className="label">Done</span>
+        </div>
+      </div>
+
       <main>
         <TaskForm onTaskAdded={handleTaskAdded} />
         <TaskList

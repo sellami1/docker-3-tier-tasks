@@ -1,3 +1,9 @@
+# Backend Deployment: Express.js API server for task management
+# Purpose: Deploys 2 replicas of the tasks-backend service handling
+# CRUD operations and business logic.
+# Connected to: MongoDB (database), Frontend (via HTTP), NetworkPolicies
+# restrict to frontend-only access
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,11 +29,21 @@ spec:
         app.kubernetes.io/name: tasks
         app.kubernetes.io/component: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
       restartPolicy: Always
       containers:
         - name: backend
-          image: tasks-backend:latest
+          image: tasks-backend:v1.0.0
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 3000
           envFrom:

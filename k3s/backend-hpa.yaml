@@ -1,3 +1,8 @@
+# HorizontalPodAutoscaler: Automatically scales the backend deployment
+# based on CPU utilization
+# Purpose: Maintains backend responsiveness by scaling from 2 to 5 replicas
+# when CPU utilization exceeds 70%
+
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

@@ -1,0 +1,8 @@
+# Namespace: Creates a dedicated namespace for the tasks application
+# Purpose: Isolates all application resources (deployments, services,
+# configs, secrets) within the tasks-app namespace
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tasks-app

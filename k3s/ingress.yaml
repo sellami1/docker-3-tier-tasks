@@ -1,3 +1,7 @@
+# Ingress: Routes external HTTP traffic to the frontend service
+# Purpose: Exposes the frontend application via the Traefik ingress
+# controller at tasks.local hostname
+
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -6,6 +10,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: traefik
 spec:
+  ingressClassName: traefik
   rules:
     - host: tasks.local
       http:

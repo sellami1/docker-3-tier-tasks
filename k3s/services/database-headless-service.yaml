@@ -1,13 +1,17 @@
+# Headless Service: Supports StatefulSet pod identity and direct pod DNS
+# Purpose: Enables StatefulSet to maintain stable DNS names
+# (database-0.database-headless) for each replica.
+
 apiVersion: v1
 kind: Service
 metadata:
-  name: database
+  name: database-headless
   namespace: tasks-app
   labels:
     app.kubernetes.io/name: tasks
     app.kubernetes.io/component: database
 spec:
-  type: ClusterIP
+  clusterIP: None
   selector:
     app.kubernetes.io/name: tasks
     app.kubernetes.io/component: database

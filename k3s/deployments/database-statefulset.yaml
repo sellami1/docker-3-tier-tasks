@@ -1,5 +1,11 @@
+# Database StatefulSet: MongoDB instance with persistent storage
+# Purpose: Provides a single MongoDB replica with stable hostname
+# and persistent data via PVC and headless service.
+# Storage: Uses mongo-data PVC with app-local-path StorageClass;
+# init script creates app user and sample data.
+
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: database
   namespace: tasks-app
@@ -8,8 +14,9 @@ metadata:
     app.kubernetes.io/component: database
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
+  serviceName: database-headless
+  updateStrategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       app.kubernetes.io/name: tasks
@@ -20,11 +27,16 @@ spec:
         app.kubernetes.io/name: tasks
         app.kubernetes.io/component: database
     spec:
+      securityContext:
+        fsGroup: 999
       restartPolicy: Always
       containers:
         - name: database
           image: mongo:7.0
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
           ports:
             - containerPort: 27017
           env:
@@ -74,20 +86,14 @@ spec:
               memory: 512Mi
           readinessProbe:
             exec:
-              command:
-                - sh
-                - -c
-                - mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval 'db.runCommand({ ping: 1 })'
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
             initialDelaySeconds: 20
             periodSeconds: 20
             timeoutSeconds: 10
             failureThreshold: 3
           livenessProbe:
             exec:
-              command:
-                - sh
-                - -c
-                - mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval 'db.runCommand({ ping: 1 })'
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
             initialDelaySeconds: 40
             periodSeconds: 30
             timeoutSeconds: 10

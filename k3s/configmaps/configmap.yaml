@@ -1,3 +1,9 @@
+# ConfigMaps: Non-sensitive application configuration
+# Purpose: Stores database connection details, frontend
+# API URL, and MongoDB initialization script.
+# Contents: app-config (DB connection), frontend-config
+# (Vite API URL), mongo-init-script (init data)
+
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -1,0 +1,1064 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Déploiement d'une Application Full-Stack}
+\fancyhead[R]{\leftmark}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titleformat{\section}
+  {\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries}{\thesubsection}{1em}{}
+
+\begin{document}
+
+% ==============================
+% PAGE DE GARDE
+% ==============================
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+{\Huge\bfseries Déploiement d'une Application Web Full-Stack}\\[0.5cm]
+{\LARGE\bfseries Docker Compose \& Kubernetes (K3s)}\\[2cm]
+{\Large Application : Simple 3-Tier Tasks Web App}\\[0.3cm]
+{\large Stack : React / Express.js / MongoDB / Nginx}\\[3cm]
+\rule{\textwidth}{1pt}\\[0.5cm]
+{\large\itshape Rapport technique de projet DevOps}\\[0.5cm]
+\rule{\textwidth}{1pt}\\[3cm]
+{\large\textbf{Outils :}} Docker/Compose CLI, kubectl, K3s, VS Code, Git\\[2cm]
+{\large Date : Mai 2026}
+\vfill
+\end{titlepage}
+
+% ==============================
+% RÉSUMÉ
+% ==============================
+\chapter*{Résumé / Executive Summary}
+\addcontentsline{toc}{chapter}{Résumé / Executive Summary}
+
+Ce rapport présente le déploiement d'une application web trois-tiers (gestionnaire de tâches) avec Docker Compose pour le développement local, puis Kubernetes (K3s) pour la production sur un cluster de trois nœuds. L'application a été choisie pour sa simplicité, permettant de se concentrer sur les bonnes pratiques DevOps.
+
+\textbf{Technologies :} React (Vite) + Express.js + MongoDB + Nginx, orchestrées par Docker Compose et K3s.
+
+\textbf{Résultats :} Déploiement fonctionnel avec multi-stage builds, utilisateurs non-root, limites de ressources, healthchecks, probes, secrets externalisés, NetworkPolicies, Ingress et HPA.
+
+% ==============================
+% INTRODUCTION
+% ==============================
+\chapter{Introduction}
+
+\section{Présentation de l'application}
+
+L'application choisie est un \textbf{gestionnaire de tâches simple} (3-Tier Tasks Web App). Sa simplicité délibérée permet de se concentrer sur la complexité du déploiement.
+
+\textbf{Fonctionnalités :} CRUD de tâches via interface React, API REST Express.js, persistance MongoDB.
+
+\section{Architecture globale}
+
+Architecture trois-tiers :
+\begin{enumerate}
+\item \textbf{Frontend} : React servi par Nginx (port 80/8080)
+\item \textbf{Backend} : API REST Express.js (port 3000)
+\item \textbf{Database} : MongoDB (port 27017)
+\end{enumerate}
+
+\section{Choix technologiques}
+\begin{itemize}
+\item \textbf{React + Vite} : build rapide, assets optimisés
+\item \textbf{Express.js} : backend léger et performant
+\item \textbf{MongoDB} : NoSQL documentaire adapté aux données flexibles
+\item \textbf{Nginx} : serveur statique et reverse proxy
+\item \textbf{Docker Compose} : orchestration locale simple
+\item \textbf{K3s} : Kubernetes allégé pour environnements limités
+\end{itemize}
+
+% ==============================
+% ENVIRONNEMENT
+% ==============================
+\chapter{Préparation de l'environnement}
+
+\section{Outils installés}
+\begin{itemize}
+\item Docker Engine et Docker Compose CLI
+\item kubectl (client Kubernetes)
+\item K3s (distribution allégée)
+\item VS Code (édition des manifests)
+\item Git (versioning)
+\end{itemize}
+
+\section{Configuration de la machine hôte}
+
+Machine hôte Windows 16~Go RAM, 3 VMs Debian sous VMware Workstation :
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{VM} & \textbf{Rôle} & \textbf{IP host-only} & \textbf{IP bridged} \\
+\hline
+k3s-cp & Control-plane & 192.168.204.129 & 192.168.1.20 \\
+k3s-w1 & Worker 1 & 192.168.204.130 & -- \\
+k3s-w2 & Worker 2 & 192.168.204.131 & -- \\
+\hline
+\end{tabular}
+\caption{Configuration des VMs}
+\end{table}
+
+\section{Installation du cluster K3s}
+
+\subsection{Topologie réseau}
+\begin{itemize}
+\item \textbf{Host-only} (192.168.204.0/24) : communication interne cluster (Flannel, K3s)
+\item \textbf{Bridged} (192.168.1.0/24) : accès LAN externe pour le control-plane
+\end{itemize}
+
+\subsection{Configuration control-plane}
+\texttt{/etc/rancher/k3s/config.yaml} :
+\begin{lstlisting}[language=yaml]
+node-ip: 192.168.204.129
+node-external-ip: 192.168.1.20
+flannel-iface: <interface-host-only>
+tls-san:
+  - 192.168.204.129
+  - 192.168.1.20
+\end{lstlisting}
+
+\subsection{Workers}
+Les workers rejoignent via le control-plane host-only :
+\begin{lstlisting}[language=yaml]
+node-ip: 192.168.204.130
+flannel-iface: <interface-host-only>
+\end{lstlisting}
+
+\subsection{Difficultés rencontrées}
+\begin{itemize}
+\item \textbf{Clonage VMs} : modification hostname, IP, /etc/machine-id, clés SSH
+\item \textbf{Mauvaise interface} : configuration explicite de \texttt{node-ip} et \texttt{flannel-iface}
+\item \textbf{Changement de sous-réseau} : mise à jour IP control-plane, régénération token, réinstallation agents
+\end{itemize}
+
+\section{Versioning (Git)}
+Branche \texttt{main} pour le code stable, fichiers sensibles exclus via \texttt{.gitignore} et \texttt{.dockerignore}.
+
+% ==============================
+% PHASE 1 : DOCKER COMPOSE
+% ==============================
+\chapter{Phase 1 : Déploiement avec Docker Compose}
+
+\section{Structure du projet}
+
+\begin{lstlisting}[language=bash]
+.
+|-- react-tasks-frontend/      # React (Vite) + nginx.conf
+|-- express-tasks-backend/     # Express + Dockerfile + init/
+|-- docker-compose.yml
+|-- .env
+|-- .dockerignore
+|-- screenshots/
+\end{lstlisting}
+
+\section{Dockerfiles et multi-stage builds}
+
+\subsection{Backend (Express.js)}
+
+\begin{lstlisting}[language=Dockerfile,caption=Dockerfile - Backend]
+# Stage 1: Builder
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+
+# Stage 2: Production
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app /app
+
+# Utilisateur non-root
+RUN addgroup -g 1001 -S nodejs && \\
+    adduser -S backenduser -u 1001
+RUN chown -R backenduser:nodejs /app
+USER backenduser
+
+ENV PORT=3000
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \\
+  CMD wget --no-verbose --tries=1 \\
+    --spider http://localhost:${PORT}/health || exit 1
+
+CMD ["node", "server.js"]
+\end{lstlisting}
+
+\textbf{Bonnes pratiques :} multi-stage build, image Alpine, utilisateur non-root (UID 1001), healthcheck HTTP sur /health.
+
+\subsection{Frontend (React + Nginx)}
+
+\begin{lstlisting}[language=Dockerfile,caption=Dockerfile - Frontend]
+# Stage 1: Build Vite app
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+RUN npm run build
+
+# Stage 2: Serve with nginx:alpine
+FROM nginx:alpine
+RUN addgroup -g 1001 -S frontendgroup && \\
+    adduser -u 1001 -S frontenduser -G frontendgroup
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+RUN chown -R frontenduser:frontendgroup /usr/share/nginx/html && \\
+    chown -R frontenduser:frontendgroup /var/cache/nginx \\
+    /var/log/nginx /etc/nginx/conf.d
+USER frontenduser
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \\
+  CMD wget --no-verbose --tries=1 \\
+    --spider http://127.0.0.1:8080/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
+\end{lstlisting}
+
+\textbf{Bonnes pratiques :} injection ARG au build-time, Nginx avec proxy vers backend, utilisateur non-root (UID 1001), healthcheck HTTP.
+
+\section{Fichier docker-compose.yml}
+
+\begin{lstlisting}[language=yaml,caption=docker-compose.yml]
+services:
+  database:
+    image: mongo:7.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DB_NAME}
+      DB_NAME: ${DB_NAME}
+      DB_APP_USER: ${DB_APP_USER}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+      - ./express-tasks-backend/init/init-db.sh:/docker-entrypoint-initdb.d/10-init-db.sh:ro
+    networks:
+      - backend-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ping: 1})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+
+  backend:
+    build: ./express-tasks-backend
+    environment:
+      PORT: ${PORT}
+      DB_HOST: database
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_APP_USER: ${DB_APP_USER}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - frontend-net
+      - backend-net
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+
+  frontend:
+    build:
+      context: ./react-tasks-frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - frontend-net
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+
+volumes:
+  mongo-data:
+    driver: local
+
+networks:
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
+\end{lstlisting}
+
+\section{Best practices appliquées}
+
+\subsection{Versions explicites des images}
+Tag \texttt{mongo:7.0} utilisé au lieu de \texttt{latest} pour garantir la reproductibilité.
+
+\subsection{Réseaux personnalisés}
+\begin{itemize}
+\item \textbf{frontend-net} : frontend $\leftrightarrow$ backend
+\item \textbf{backend-net} : backend $\leftrightarrow$ database
+\end{itemize}
+L'isolation empêche le frontend d'atteindre directement la base de données.
+
+\subsection{Volumes nommés}
+\begin{itemize}
+\item \textbf{mongo-data} : volume nommé pour la persistance des données
+\item \textbf{Bind mount} : script d'initialisation monté en lecture seule (\texttt{:ro})
+\end{itemize}
+
+\subsection{Variables d'environnement et fichier .env}
+
+Toutes les variables sensibles sont externalisées dans \texttt{.env} :
+
+\begin{lstlisting}[language=bash]
+DB_ROOT_USER=...
+DB_ROOT_PASSWORD=...
+DB_NAME=...
+DB_APP_USER=...
+DB_APP_PASSWORD=...
+PORT=3000
+VITE_API_URL=/api
+\end{lstlisting}
+
+Le fichier \texttt{.env} est exclu de Git via \texttt{.gitignore}.
+
+\subsection{Healthchecks et dépendances}
+\begin{itemize}
+\item Database : mongosh avec \texttt{db.runCommand({ping: 1})}
+\item Backend : HTTP /health (via Dockerfile)
+\item Frontend : HTTP / (via Dockerfile)
+\item \texttt{depends\_on} avec \texttt{condition: service\_healthy} pour l'ordre de démarrage
+\end{itemize}
+
+\subsection{Limites de ressources}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Service} & \textbf{CPU} & \textbf{Mémoire} & \textbf{Restart} \\
+\hline
+Database & 0.5 & 512m & unless-stopped \\
+Backend & 0.5 & 256m & unless-stopped \\
+Frontend & 0.25 & 128m & unless-stopped \\
+\hline
+\end{tabular}
+\caption{Limites de ressources Docker Compose}
+\end{table}
+
+\subsection{Commandes utilisées}
+
+\begin{lstlisting}[language=bash]
+# Build et demarrage
+docker compose up -d --build
+
+# Verification des services
+docker compose ps
+docker compose logs -f backend
+
+# Statistiques runtime
+docker stats
+\end{lstlisting}
+
+% ==============================
+% PHASE 2 : KUBERNETES K3S
+% ==============================
+\chapter{Phase 2 : Déploiement sur Cluster Kubernetes (K3s)}
+
+\section{Architecture du cluster K3s}
+
+Le cluster est composé de 3 nœuds Debian sous VMware Workstation :
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Nœud} & \textbf{Rôle} & \textbf{IP interne} & \textbf{État} \\
+\hline
+k3s-cp & Control-plane & 192.168.204.129 & Ready \\
+k3s-w1 & Worker 1 & 192.168.204.130 & Ready \\
+k3s-w2 & Worker 2 & 192.168.204.131 & Ready \\
+\hline
+\end{tabular}
+\caption{État du cluster K3s}
+\end{table}
+
+\section{Namespace dédié}
+
+Toutes les ressources sont isolées dans le namespace \texttt{tasks-app} :
+
+\begin{lstlisting}[language=yaml,caption=namespace.yaml]
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tasks-app
+\end{lstlisting}
+
+\section{Manifests Kubernetes}
+
+\subsection{Deployments et StatefulSet}
+
+\subsubsection{Backend Deployment}
+
+\begin{lstlisting}[language=yaml,caption=backend-deployment.yaml]
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: tasks-app
+  labels:
+    app.kubernetes.io/name: tasks
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tasks
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tasks
+        app.kubernetes.io/component: backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+        - name: backend
+          image: tasks-backend:v1.0.0
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: DB_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: DB_APP_USER
+            - name: DB_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: DB_APP_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+\end{lstlisting}
+
+\textbf{Caractéristiques :} 2 replicas, RollingUpdate zero-downtime, utilisateur non-root, probes readiness/liveness, ressources limitées, secrets via variables d'environnement.
+
+\subsubsection{Frontend Deployment}
+
+\begin{lstlisting}[language=yaml,caption=frontend-deployment.yaml]
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: tasks-app
+  labels:
+    app.kubernetes.io/name: tasks
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tasks
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tasks
+        app.kubernetes.io/component: frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+        - name: frontend
+          image: tasks-frontend:v1.0.0
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: frontend-config
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 20
+            periodSeconds: 20
+\end{lstlisting}
+
+\subsubsection{Database StatefulSet}
+
+\begin{lstlisting}[language=yaml,caption=database-statefulset.yaml]
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: database
+  namespace: tasks-app
+  labels:
+    app.kubernetes.io/name: tasks
+    app.kubernetes.io/component: database
+spec:
+  replicas: 1
+  serviceName: database-headless
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tasks
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tasks
+        app.kubernetes.io/component: database
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: database
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+          ports:
+            - containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: DB_ROOT_USER
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: DB_ROOT_PASSWORD
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+            - name: mongo-init
+              mountPath: /docker-entrypoint-initdb.d/10-init-db.sh
+              subPath: 10-init-db.sh
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          livenessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 40
+            periodSeconds: 30
+      volumes:
+        - name: mongo-data
+          persistentVolumeClaim:
+            claimName: mongo-data
+        - name: mongo-init
+          configMap:
+            name: mongo-init-script
+            defaultMode: 0555
+\end{lstlisting}
+
+\textbf{Pourquoi StatefulSet ?} MongoDB nécessite un identité réseau stable, un stockage persistant qui suit le pod, et un ordre de déploiement garanti.
+
+\subsection{Services}
+
+\subsubsection{Backend Service (ClusterIP)}
+
+\begin{lstlisting}[language=yaml,caption=backend-service.yaml]
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: tasks-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: tasks
+    app.kubernetes.io/component: backend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+\end{lstlisting}
+
+\subsubsection{Frontend Service (NodePort)}
+
+\begin{lstlisting}[language=yaml,caption=frontend-service.yaml]
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: tasks-app
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: tasks
+    app.kubernetes.io/component: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+\end{lstlisting}
+
+\subsubsection{Database Service (ClusterIP)}
+
+\begin{lstlisting}[language=yaml,caption=database-service.yaml]
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: tasks-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: tasks
+    app.kubernetes.io/component: database
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+\end{lstlisting}
+
+\subsubsection{Headless Service (StatefulSet)}
+
+\begin{lstlisting}[language=yaml,caption=database-headless-service.yaml]
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-headless
+  namespace: tasks-app
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: tasks
+    app.kubernetes.io/component: database
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017
+\end{lstlisting}
+
+\subsection{ConfigMaps}
+
+\begin{lstlisting}[language=yaml,caption=configmap.yaml]
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: tasks-app
+data:
+  DB_HOST: database
+  DB_PORT: "27017"
+  DB_NAME: tasksdb
+  PORT: "3000"
+  ORIGIN: "*"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: tasks-app
+data:
+  VITE_API_URL: /api
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongo-init-script
+  namespace: tasks-app
+data:
+  10-init-db.sh: |
+    #!/usr/bin/env bash
+    set -e
+    mongosh -u "${MONGO_INITDB_ROOT_USERNAME}" \\
+      -p "${MONGO_INITDB_ROOT_PASSWORD}" \\
+      --authenticationDatabase admin <<EOF
+    db = db.getSiblingDB("${DB_NAME}");
+    # Creation de l'utilisateur app et donnees initiales
+    ...
+    EOF
+\end{lstlisting}
+
+\subsection{Secrets}
+
+\begin{lstlisting}[language=yaml,caption=secret.yaml]
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secrets
+  namespace: tasks-app
+type: Opaque
+stringData:
+  DB_ROOT_USER: admin
+  DB_ROOT_PASSWORD: change-me
+  DB_APP_USER: appuser
+  DB_APP_PASSWORD: change-me
+\end{lstlisting}
+
+\textbf{Note :} En production, il est recommandé d'utiliser un gestionnaire de secrets externe (HashiCorp Vault, AWS Secrets Manager).
+
+\subsection{Stockage persistant}
+
+\subsubsection{StorageClass}
+
+\begin{lstlisting}[language=yaml,caption=storageclass.yaml]
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: app-local-path
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+\end{lstlisting}
+
+\subsubsection{PersistentVolumeClaim}
+
+\begin{lstlisting}[language=yaml,caption=mongo-pvc.yaml]
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data
+  namespace: tasks-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: app-local-path
+  resources:
+    requests:
+      storage: 5Gi
+\end{lstlisting}
+
+\subsection{Ingress}
+
+\begin{lstlisting}[language=yaml,caption=ingress.yaml]
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tasks-ingress
+  namespace: tasks-app
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: tasks.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+\end{lstlisting}
+
+\subsection{Horizontal Pod Autoscaler (HPA)}
+
+\begin{lstlisting}[language=yaml,caption=backend-hpa.yaml]
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: tasks-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+\end{lstlisting}
+
+\subsection{NetworkPolicies}
+
+\begin{lstlisting}[language=yaml,caption=networkpolicy.yaml]
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-allow-ingress
+  namespace: tasks-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-allow-from-frontend
+  namespace: tasks-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: frontend
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-allow-from-backend
+  namespace: tasks-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: database
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+      ports:
+        - protocol: TCP
+          port: 27017
+\end{lstlisting}
+
+\section{Récapitulatif des best practices Kubernetes}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|p{8cm}|}
+\hline
+\textbf{Best Practice} & \textbf{Application} \\
+\hline
+Namespace dédié & tasks-app \\
+Labels cohérents & app.kubernetes.io/name, app.kubernetes.io/component \\
+Resource requests/limits & CPU et mémoire sur tous les conteneurs \\
+Liveness/Readiness probes & HTTP pour frontend/backend, exec pour MongoDB \\
+RollingUpdate & maxSurge=1, maxUnavailable=0 \\
+Utilisateur non-root & runAsUser: 1001 (app), 999 (MongoDB) \\
+Replicas critiques & 2 pour frontend et backend \\
+Secrets externalisés & db-secrets injectés via env vars \\
+ConfigMaps & app-config, frontend-config, mongo-init-script \\
+PVC + StorageClass & mongo-data (5Gi, app-local-path) \\
+Ingress & Traefik sur tasks.local \\
+HPA & backend scale 2--5 replicas selon CPU 70\% \\
+NetworkPolicies & Isolation frontend/backend/database \\
+\hline
+\end{tabular}
+\caption{Best practices appliquées sur K3s}
+\end{table}
+
+\section{Commandes d'application des manifests}
+
+\begin{lstlisting}[language=bash]
+# Application sequentielle des manifests
+kubectl apply -f k3s/namespace.yaml
+kubectl apply -f k3s/storageclass.yaml
+kubectl apply -f k3s/secrets/secret.yaml
+kubectl apply -f k3s/configmaps/configmap.yaml
+kubectl apply -f k3s/deployments/
+kubectl apply -f k3s/services/
+kubectl apply -f k3s/ingress.yaml
+kubectl apply -f k3s/backend-hpa.yaml
+kubectl apply -f k3s/networkpolicy.yaml
+
+# Verification
+curl http://<node-ip>:30080  # Acces frontend via NodePort
+\end{lstlisting}
+
+% ==============================
+% PLACEHOLDERS CHAPITRES RESTANTS
+% ==============================
+\chapter{Tests et Validation}
+\textbf{[Section à compléter par l'étudiant]}
+
+Cette section doit présenter les tests fonctionnels et de validation effectués sur les deux environnements (Docker Compose et K3s). Elle doit inclure :
+
+\begin{itemize}
+\item Tests fonctionnels sur Docker Compose (endpoints CRUD, healthchecks, persistance)
+\item Tests sur le cluster K3s (curl, navigateur, NodePort 30080, Ingress tasks.local)
+\item Vérification de la haute disponibilité (arrêt d'un worker, résilience des pods)
+\item Monitoring basique avec \texttt{kubectl get all}, \texttt{logs}, \texttt{describe}
+\item Captures d'écran et preuves de fonctionnement
+\end{itemize}
+
+\chapter{Difficultés rencontrées et solutions apportées}
+\textbf{[Section à compléter par l'étudiant]}
+
+Cette section doit documenter les problèmes techniques rencontrés et les solutions mises en œuvre. Exemples de sujets à traiter :
+
+\begin{itemize}
+\item Problèmes de réseau lors du clonage des VMs (hostname, IP, machine-id)
+\item Mauvaise sélection d'interface par K3s (node-ip, flannel-iface)
+\item Rejoint du cluster après changement de sous-réseau (token, réinstallation agents)
+\item Problèmes de healthchecks et timeouts
+\item Persistance des données et volumes
+\end{itemize}
+
+\chapter{Conclusion et perspectives}
+\textbf{[Section à compléter par l'étudiant]}
+
+Cette section doit inclure :
+
+\begin{itemize}
+\item Ce qui a été appris durant le projet
+\item Les compétences acquises en Docker, Kubernetes et DevOps
+\item Améliorations possibles : CI/CD (GitHub Actions, GitLab CI), monitoring avancé (Prometheus/Grafana), GitOps (ArgoCD), cert-manager pour TLS, multi-réplica MongoDB (replica set)
+\end{itemize}
+
+% ==============================
+% ANNEXES
+% ==============================
+\chapter*{Annexes}
+\addcontentsline{toc}{chapter}{Annexes}
+
+\section*{Arborescence complète du projet}
+\textbf{[À compléter]}
+
+\section*{Captures d'écran importantes}
+\textbf{[À insérer]}
+
+\section*{Commandes utiles}
+\textbf{[Résumé des commandes kubectl et docker les plus utilisées]}
+
+\end{document}

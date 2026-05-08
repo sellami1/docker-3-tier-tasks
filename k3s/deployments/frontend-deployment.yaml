@@ -1,3 +1,8 @@
+# Frontend Deployment: React SPA served by Nginx
+# Purpose: Deploys 2 replicas of the tasks-frontend web interface
+# with reverse-proxy to backend at /api
+# Connected to: Backend service (via Nginx proxy), Public users (via NodePort/Ingress)
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,11 +28,21 @@ spec:
         app.kubernetes.io/name: tasks
         app.kubernetes.io/component: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
       restartPolicy: Always
       containers:
         - name: frontend
-          image: tasks-frontend:latest
+          image: tasks-frontend:v1.0.0
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 80
           envFrom:

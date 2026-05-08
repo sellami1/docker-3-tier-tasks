@@ -1,0 +1,67 @@
+# NetworkPolicies: Define network access rules between application tiers
+# Purpose: Enforce secure pod-to-pod communication: frontend accepts ingress,
+# backend only from frontend, database only from backend
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-allow-ingress
+  namespace: tasks-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tasks
+      app.kubernetes.io/component: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-allow-from-frontend
+  namespace: tasks-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tasks
+      app.kubernetes.io/component: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tasks
+              app.kubernetes.io/component: frontend
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-allow-from-backend
+  namespace: tasks-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tasks
+      app.kubernetes.io/component: database
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tasks
+              app.kubernetes.io/component: backend
+      ports:
+        - protocol: TCP
+          port: 27017

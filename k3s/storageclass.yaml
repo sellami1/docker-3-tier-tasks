@@ -1,0 +1,11 @@
+# StorageClass: Defines local storage provisioning for K3s
+# Purpose: Enables persistent volume claims to be fulfilled
+# by local node storage using the rancher local-path provisioner
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: app-local-path
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
