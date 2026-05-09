@@ -31,3 +31,4 @@ tmp*.*
 
 diagram/
 k3s-demo/
+k3s-demo/dply/rollout_update.webp
