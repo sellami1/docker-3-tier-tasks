@@ -14,6 +14,16 @@
 \usepackage{fancyhdr}
 \usepackage{titlesec}
 
+% Screenshot macro with title and image
+\newcommand{\screenshot}[2]{%
+  \begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{#2}
+    \caption{#1}
+    \label{fig:#2}
+  \end{figure}
+}
+
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
 \definecolor{codepurple}{rgb}{0.58,0,0.82}
@@ -74,7 +84,7 @@
 {\Large Application : Simple 3-Tier Tasks Web App}\\[0.3cm]
 {\large Stack : React / Express.js / MongoDB / Nginx}\\[3cm]
 \rule{\textwidth}{1pt}\\[0.5cm]
-{\large\itshape Rapport technique de projet DevOps}\\[0.5cm]
+{\large\itshape Rapport technique de projet DevOps - K3s}\\[0.5cm]
 \rule{\textwidth}{1pt}\\[3cm]
 {\large\textbf{Outils :}} Docker/Compose CLI, kubectl, K3s, VS Code, Git\\[2cm]
 {\large Date : Mai 2026}
@@ -212,150 +222,6 @@ Branche \texttt{main} pour le code stable, fichiers sensibles exclus via \texttt
 |-- screenshots/
 \end{lstlisting}
 
-\section{Dockerfiles et multi-stage builds}
-
-\subsection{Backend (Express.js)}
-
-% FIX 3: Use the custom Dockerfile language defined above; fix \\ -> \ in code listings
-\begin{lstlisting}[language=Dockerfile,caption=Dockerfile - Backend]
-# Stage 1: Builder
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-
-# Stage 2: Production
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=builder /app /app
-
-# Utilisateur non-root
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S backenduser -u 1001
-RUN chown -R backenduser:nodejs /app
-USER backenduser
-
-ENV PORT=3000
-EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --no-verbose --tries=1 \
-    --spider http://localhost:${PORT}/health || exit 1
-
-CMD ["node", "server.js"]
-\end{lstlisting}
-
-\textbf{Bonnes pratiques :} multi-stage build, image Alpine, utilisateur non-root (UID 1001), healthcheck HTTP sur /health.
-
-\subsection{Frontend (React + Nginx)}
-
-\begin{lstlisting}[language=Dockerfile,caption=Dockerfile - Frontend]
-# Stage 1: Build Vite app
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
-RUN npm run build
-
-# Stage 2: Serve with nginx:alpine
-FROM nginx:alpine
-RUN addgroup -g 1001 -S frontendgroup && \
-    adduser -u 1001 -S frontenduser -G frontendgroup
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-RUN chown -R frontenduser:frontendgroup /usr/share/nginx/html && \
-    chown -R frontenduser:frontendgroup /var/cache/nginx \
-    /var/log/nginx /etc/nginx/conf.d
-USER frontenduser
-EXPOSE 8080
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --no-verbose --tries=1 \
-    --spider http://127.0.0.1:8080/ || exit 1
-
-CMD ["nginx", "-g", "daemon off;"]
-\end{lstlisting}
-
-\textbf{Bonnes pratiques :} injection ARG au build-time, Nginx avec proxy vers backend, utilisateur non-root (UID 1001), healthcheck HTTP.
-
-\section{Fichier docker-compose.yml}
-
-\begin{lstlisting}[language=yaml,caption=docker-compose.yml]
-services:
-  database:
-    image: mongo:7.0
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${DB_ROOT_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MONGO_INITDB_DATABASE: ${DB_NAME}
-      DB_NAME: ${DB_NAME}
-      DB_APP_USER: ${DB_APP_USER}
-      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
-    volumes:
-      - mongo-data:/data/db
-      - ./express-tasks-backend/init/init-db.sh:/docker-entrypoint-initdb.d/10-init-db.sh:ro
-    networks:
-      - backend-net
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.runCommand({ping: 1})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: unless-stopped
-    mem_limit: 512m
-    cpus: 0.5
-
-  backend:
-    build: ./express-tasks-backend
-    environment:
-      PORT: ${PORT}
-      DB_HOST: database
-      DB_PORT: ${DB_PORT}
-      DB_NAME: ${DB_NAME}
-      DB_APP_USER: ${DB_APP_USER}
-      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
-    depends_on:
-      database:
-        condition: service_healthy
-    networks:
-      - frontend-net
-      - backend-net
-    restart: unless-stopped
-    mem_limit: 256m
-    cpus: 0.5
-
-  frontend:
-    build:
-      context: ./react-tasks-frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL}
-    ports:
-      - "8080:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - frontend-net
-    restart: unless-stopped
-    mem_limit: 128m
-    cpus: 0.25
-
-volumes:
-  mongo-data:
-    driver: local
-
-networks:
-  frontend-net:
-    driver: bridge
-  backend-net:
-    driver: bridge
-\end{lstlisting}
-
 \section{Best practices appliquées}
 
 \subsection{Versions explicites des images}
@@ -451,537 +317,6 @@ k3s-w2 & Worker 2 & 192.168.204.131 & Ready \\
 \caption{État du cluster K3s}
 \end{table}
 
-\section{Namespace dédié}
-
-Toutes les ressources sont isolées dans le namespace \texttt{tasks-app} :
-
-\begin{lstlisting}[language=yaml,caption=namespace.yaml]
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: tasks-app
-\end{lstlisting}
-
-\section{Manifests Kubernetes}
-
-\subsection{Deployments et StatefulSet}
-
-\subsubsection{Backend Deployment}
-
-\begin{lstlisting}[language=yaml,caption=backend-deployment.yaml]
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: backend
-  namespace: tasks-app
-  labels:
-    app.kubernetes.io/name: tasks
-    app.kubernetes.io/component: backend
-spec:
-  replicas: 2
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: tasks
-      app.kubernetes.io/component: backend
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: tasks
-        app.kubernetes.io/component: backend
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
-      containers:
-        - name: backend
-          image: tasks-backend:v1.0.0
-          imagePullPolicy: Never
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-          ports:
-            - containerPort: 3000
-          envFrom:
-            - configMapRef:
-                name: app-config
-          env:
-            - name: DB_APP_USER
-              valueFrom:
-                secretKeyRef:
-                  name: db-secrets
-                  key: DB_APP_USER
-            - name: DB_APP_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: db-secrets
-                  key: DB_APP_PASSWORD
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 3000
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 3000
-            initialDelaySeconds: 20
-            periodSeconds: 20
-\end{lstlisting}
-
-\textbf{Caractéristiques :} 2 replicas, RollingUpdate zero-downtime, utilisateur non-root, probes readiness/liveness, ressources limitées, secrets via variables d'environnement.
-
-\subsubsection{Frontend Deployment}
-
-\begin{lstlisting}[language=yaml,caption=frontend-deployment.yaml]
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: frontend
-  namespace: tasks-app
-  labels:
-    app.kubernetes.io/name: tasks
-    app.kubernetes.io/component: frontend
-spec:
-  replicas: 2
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: tasks
-      app.kubernetes.io/component: frontend
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: tasks
-        app.kubernetes.io/component: frontend
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
-      containers:
-        - name: frontend
-          image: tasks-frontend:v1.0.0
-          imagePullPolicy: Never
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-          ports:
-            - containerPort: 80
-          envFrom:
-            - configMapRef:
-                name: frontend-config
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 128Mi
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: 20
-            periodSeconds: 20
-\end{lstlisting}
-
-\subsubsection{Database StatefulSet}
-
-\begin{lstlisting}[language=yaml,caption=database-statefulset.yaml]
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: database
-  namespace: tasks-app
-  labels:
-    app.kubernetes.io/name: tasks
-    app.kubernetes.io/component: database
-spec:
-  replicas: 1
-  serviceName: database-headless
-  updateStrategy:
-    type: RollingUpdate
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: tasks
-      app.kubernetes.io/component: database
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: tasks
-        app.kubernetes.io/component: database
-    spec:
-      securityContext:
-        fsGroup: 999
-      containers:
-        - name: database
-          image: mongo:7.0
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsUser: 999
-            runAsGroup: 999
-          ports:
-            - containerPort: 27017
-          env:
-            - name: MONGO_INITDB_ROOT_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: db-secrets
-                  key: DB_ROOT_USER
-            - name: MONGO_INITDB_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: db-secrets
-                  key: DB_ROOT_PASSWORD
-          volumeMounts:
-            - name: mongo-data
-              mountPath: /data/db
-            - name: mongo-init
-              mountPath: /docker-entrypoint-initdb.d/10-init-db.sh
-              subPath: 10-init-db.sh
-              readOnly: true
-          resources:
-            requests:
-              cpu: 250m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-          readinessProbe:
-            exec:
-              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-            initialDelaySeconds: 20
-            periodSeconds: 20
-          livenessProbe:
-            exec:
-              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-            initialDelaySeconds: 40
-            periodSeconds: 30
-      volumes:
-        - name: mongo-data
-          persistentVolumeClaim:
-            claimName: mongo-data
-        - name: mongo-init
-          configMap:
-            name: mongo-init-script
-            defaultMode: 0555
-\end{lstlisting}
-
-\textbf{Pourquoi StatefulSet ?} MongoDB nécessite une identité réseau stable, un stockage persistant qui suit le pod, et un ordre de déploiement garanti.
-
-\subsection{Services}
-
-\subsubsection{Backend Service (ClusterIP)}
-
-\begin{lstlisting}[language=yaml,caption=backend-service.yaml]
-apiVersion: v1
-kind: Service
-metadata:
-  name: backend
-  namespace: tasks-app
-spec:
-  type: ClusterIP
-  selector:
-    app.kubernetes.io/name: tasks
-    app.kubernetes.io/component: backend
-  ports:
-    - name: http
-      port: 3000
-      targetPort: 3000
-\end{lstlisting}
-
-\subsubsection{Frontend Service (NodePort)}
-
-\begin{lstlisting}[language=yaml,caption=frontend-service.yaml]
-apiVersion: v1
-kind: Service
-metadata:
-  name: frontend
-  namespace: tasks-app
-spec:
-  type: NodePort
-  selector:
-    app.kubernetes.io/name: tasks
-    app.kubernetes.io/component: frontend
-  ports:
-    - name: http
-      port: 80
-      targetPort: 80
-      nodePort: 30080
-\end{lstlisting}
-
-\subsubsection{Database Service (ClusterIP)}
-
-\begin{lstlisting}[language=yaml,caption=database-service.yaml]
-apiVersion: v1
-kind: Service
-metadata:
-  name: database
-  namespace: tasks-app
-spec:
-  type: ClusterIP
-  selector:
-    app.kubernetes.io/name: tasks
-    app.kubernetes.io/component: database
-  ports:
-    - name: mongo
-      port: 27017
-      targetPort: 27017
-\end{lstlisting}
-
-\subsubsection{Headless Service (StatefulSet)}
-
-\begin{lstlisting}[language=yaml,caption=database-headless-service.yaml]
-apiVersion: v1
-kind: Service
-metadata:
-  name: database-headless
-  namespace: tasks-app
-spec:
-  clusterIP: None
-  selector:
-    app.kubernetes.io/name: tasks
-    app.kubernetes.io/component: database
-  ports:
-    - name: mongo
-      port: 27017
-      targetPort: 27017
-\end{lstlisting}
-
-\subsection{ConfigMaps}
-
-\begin{lstlisting}[language=yaml,caption=configmap.yaml]
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app-config
-  namespace: tasks-app
-data:
-  DB_HOST: database
-  DB_PORT: "27017"
-  DB_NAME: tasksdb
-  PORT: "3000"
-  ORIGIN: "*"
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: frontend-config
-  namespace: tasks-app
-data:
-  VITE_API_URL: /api
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: mongo-init-script
-  namespace: tasks-app
-data:
-  10-init-db.sh: |
-    #!/usr/bin/env bash
-    set -e
-    mongosh -u "${MONGO_INITDB_ROOT_USERNAME}" \
-      -p "${MONGO_INITDB_ROOT_PASSWORD}" \
-      --authenticationDatabase admin <<EOF
-    db = db.getSiblingDB("${DB_NAME}");
-    // Creation de l'utilisateur app et donnees initiales
-    ...
-    EOF
-\end{lstlisting}
-
-\subsection{Secrets}
-
-\begin{lstlisting}[language=yaml,caption=secret.yaml]
-apiVersion: v1
-kind: Secret
-metadata:
-  name: db-secrets
-  namespace: tasks-app
-type: Opaque
-stringData:
-  DB_ROOT_USER: admin
-  DB_ROOT_PASSWORD: change-me
-  DB_APP_USER: appuser
-  DB_APP_PASSWORD: change-me
-\end{lstlisting}
-
-\textbf{Note :} En production, il est recommandé d'utiliser un gestionnaire de secrets externe (HashiCorp Vault, AWS Secrets Manager).
-
-\subsection{Stockage persistant}
-
-\subsubsection{StorageClass}
-
-\begin{lstlisting}[language=yaml,caption=storageclass.yaml]
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: app-local-path
-provisioner: rancher.io/local-path
-reclaimPolicy: Retain
-volumeBindingMode: WaitForFirstConsumer
-\end{lstlisting}
-
-\subsubsection{PersistentVolumeClaim}
-
-\begin{lstlisting}[language=yaml,caption=mongo-pvc.yaml]
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mongo-data
-  namespace: tasks-app
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: app-local-path
-  resources:
-    requests:
-      storage: 5Gi
-\end{lstlisting}
-
-\subsection{Ingress}
-
-\begin{lstlisting}[language=yaml,caption=ingress.yaml]
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: tasks-ingress
-  namespace: tasks-app
-  annotations:
-    kubernetes.io/ingress.class: traefik
-spec:
-  ingressClassName: traefik
-  rules:
-    - host: tasks.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: frontend
-                port:
-                  number: 80
-\end{lstlisting}
-
-\subsection{Horizontal Pod Autoscaler (HPA)}
-
-\begin{lstlisting}[language=yaml,caption=backend-hpa.yaml]
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: backend-hpa
-  namespace: tasks-app
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: backend
-  minReplicas: 2
-  maxReplicas: 5
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-\end{lstlisting}
-
-\subsection{NetworkPolicies}
-
-\begin{lstlisting}[language=yaml,caption=networkpolicy.yaml]
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: frontend-allow-ingress
-  namespace: tasks-app
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/component: frontend
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-      ports:
-        - protocol: TCP
-          port: 80
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: backend-allow-from-frontend
-  namespace: tasks-app
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/component: backend
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: frontend
-      ports:
-        - protocol: TCP
-          port: 3000
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: database-allow-from-backend
-  namespace: tasks-app
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/component: database
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: backend
-      ports:
-        - protocol: TCP
-          port: 27017
-\end{lstlisting}
-
-\section{Récapitulatif des best practices Kubernetes}
-
 \begin{table}[h]
 \centering
 \begin{tabular}{|l|p{8cm}|}
@@ -1022,6 +357,95 @@ kubectl apply -f k3s/networkpolicy.yaml
 
 # Verification
 curl http://<node-ip>:30080  # Acces frontend via NodePort
+\end{lstlisting}
+
+\section{Vérification des déploiements}
+
+\subsection{3 Deployments distincts (ou StatefulSet pour la DB)}
+
+\screenshot{Replicas}{wrk_ld.jpeg}
+
+\begin{lstlisting}[language=bash]
+# Vérification des déploiements
+kubectl get deployments -n tasks-app
+kubectl get statefulsets -n tasks-app
+kubectl get pods -n tasks-app -o wide
+\end{lstlisting}
+
+\subsection{Resource requests et limits définis sur tous les conteneurs}
+
+\screenshot{Configuration des ressources}{res_limit.jpeg}
+
+\begin{lstlisting}[language=bash]
+# Vérification des ressources
+kubectl describe pod <pod-name> -n tasks-app | grep -A 10 "Limits\|Requests"
+kubectl top pods -n tasks-app
+\end{lstlisting}
+
+\subsection{Liveness Probe et Readiness Probe configurées}
+
+\screenshot{Liveness et Readiness Probes}{rdy_liv.jpeg}
+
+\begin{lstlisting}[language=bash]
+# Vérification des probes
+kubectl describe pod <pod-name> -n tasks-app | grep -A 5 "Readiness\|Liveness"
+kubectl get events -n tasks-app --field-selector involvedObject.name=<pod-name>
+\end{lstlisting}
+
+\subsection{Stratégie de déploiement RollingUpdate bien paramétrée}
+
+\screenshot{Configuration RollingUpdate}{rollout.jpeg}
+
+\begin{lstlisting}[language=bash]
+# Vérification de la stratégie de déploiement
+kubectl describe deployment backend -n tasks-app | grep -A 5 "Strategy"
+kubectl rollout status deployment/backend -n tasks-app
+kubectl rollout history deployment/backend -n tasks-app
+\end{lstlisting}
+
+\subsection{Conteneurs exécutés en non-root (securityContext)}
+
+\screenshot{SecurityContext - Utilisateur non-root}{sec_con.jpeg}
+
+\begin{lstlisting}[language=bash]
+# Vérification de l'utilisateur non-root
+kubectl exec -it <pod-name> -n tasks-app -- whoami
+kubectl exec -it <pod-name> -n tasks-app -- id
+kubectl get pod <pod-name> -n tasks-app -o jsonpath='{.spec.securityContext}'
+\end{lstlisting}
+
+\section{Vérification des Services et Exposition}
+
+\subsection{Services ClusterIP pour backend et base de données}
+
+\screenshot{Services ClusterIP}{0.jpeg}
+
+\begin{lstlisting}[language=bash]
+# Vérification des services ClusterIP
+kubectl get services -n tasks-app
+\end{lstlisting}
+
+\subsection{Service pour exposer le frontend (NodePort / LoadBalancer ou Ingress)}
+
+\screenshot{Services, engress et configmap}{1.jpeg}
+
+\begin{lstlisting}[language=bash]
+# Vérification du service d'exposition
+kubectl get service frontend -n tasks-app -o wide
+
+kubectl get ingress -n tasks-app
+
+# Vérification des ConfigMaps
+kubectl get configmaps -n tasks-app
+\end{lstlisting}
+
+\subsection{Secrets pour tous les éléments sensibles}
+
+\screenshot{Secret Base de données - Identifiants sécurisés}{2.jpeg}
+
+\begin{lstlisting}[language=bash]
+# Vérification des Secrets
+kubectl describe secret db-secrets -n tasks-app
 \end{lstlisting}
 
 % ==============================

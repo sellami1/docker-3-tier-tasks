@@ -72,6 +72,24 @@ Accès frontend (NodePort) : `http://<node-ip>:30080`.
 
 ---
 
+## Diagrammes d'Architecture
+
+### Architecture Docker Compose
+
+![Architecture Docker Compose](k3s-demo/docker_compose_architecture.png)
+
+### Architecture K3s (Kubernetes)
+
+![Architecture K3s](k3s-demo/k3s_tasks_architecture.png)
+
+---
+
+## Rapport de Déploiement
+
+📄 **[Télécharger le rapport complet (PDF)](k3s_deployment.pdf)**
+
+---
+
 ## Démonstration complète d'application + Preuve de persistance
 
 👉 [Voir la vidéo de démonstration](https://drive.google.com/file/d/1lD0LGpLway7i1ajiTylwehRuIllMRwrJ/view?usp=sharing)
