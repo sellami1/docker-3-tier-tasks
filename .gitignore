@@ -30,3 +30,4 @@ dist-ssr
 tmp*.*
 
 diagram/
+k3s-demo/
