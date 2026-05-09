@@ -36,8 +36,8 @@ spec:
       restartPolicy: Always
       containers:
         - name: frontend
-          image: tasks-frontend:v1.0.0
-          imagePullPolicy: Never
+          image: docker.io/kadhemsellami/tasks-frontend:v2.0.0
+          imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
